@@ -1,0 +1,172 @@
+---
+title: "IPEDS"
+output: html_document
+---
+
+Data was collected from https://nces.ed.gov/ipeds/datacenter/InstitutionByName.aspx
+
+Comparator institutions, with UNIDs are:
+
+
+ID|Institution Name|	City|State|
+---------|-------------------------------------|----------|-------|
+122409|	San Diego State University          |	San Diego|	CA|
+209807|	Portland State University           |	Portland |	OR|
+206084|	University of Toledo                |	Toledo   |	OH|
+228769|	The University of Texas at Arlington|	Arlington|	TX|
+172699|	Western Michigan University         |	Kalamazoo|	MI|
+220862|	University of Memphis               |	Memphis  |	TN|
+232186|	George Mason University             |	Fairfax  |	VA|
+145600|	University of Illinois at Chicago   |	Chicago  |	IL|
+240453|	University of Wisconsin-Milwaukee   |	Milwaukee|	WI|
+
+
+Links to the IPED data.  Note that these are the full files and not just comparator institutions.
+Total Employees and New Hires:
+
+- http://nces.ed.gov/ipeds/datacenter/data/S2014_SIS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/S2014_NH.zip
+- http://nces.ed.gov/ipeds/datacenter/data/S2013_SIS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/S2013_NH.zip
+- http://nces.ed.gov/ipeds/datacenter/data/S2012_SIS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/S2012_NH.zip
+
+Salary Data:
+
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2014_IS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2014_NIS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2013_IS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2013_NIS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2012_IS.zip
+- http://nces.ed.gov/ipeds/datacenter/data/SAL2012_NIS.zip
+
+```{r echo=FALSE}
+
+if(!file.exists("s2012_nh.csv")){
+#Download data directly
+
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2014_SIS.zip", "RawData/S2014_SIS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2014_NH.zip", "RawData/S2014_NH.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2013_SIS.zip", "RawData/S2013_SIS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2013_NH.zip", "RawData/S2013_NH.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2012_SIS.zip", "RawData/S2012_SIS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/S2012_NH.zip", "RawData/S2012_NH.zip")
+
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2014_IS.zip", "RawData/SAL2014_IS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2014_NIS.zip", "RawData/SAL2014_NIS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2013_IS.zip", "RawData/SAL2013_IS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2013_NIS.zip", "RawData/SAL2013_NIS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2012_IS.zip", "RawData/SAL2012_IS.zip")
+download.file("http://nces.ed.gov/ipeds/datacenter/data/SAL2012_NIS.zip", "RawData/SAL2012_NIS.zip")
+
+
+#Unzip
+unzip("RawData/S2014_SIS.zip")
+unzip("RawData/S2014_NH.zip")
+unzip("RawData/S2013_SIS.zip")
+unzip("RawData/S2013_NH.zip")
+unzip("RawData/S2012_SIS.zip")
+unzip("RawData/S2012_NH.zip")
+
+unzip("RawData/SAL2014_IS.zip")
+unzip("RawData/SAL2014_NIS.zip")
+unzip("RawData/SAL2013_IS.zip")
+unzip("RawData/SAL2013_NIS.zip")
+unzip("RawData/SAL2012_IS.zip")
+unzip("RawData/SAL2012_NIS.zip")
+}
+
+CompareIDs<-c(122409,209807,206084,228769,172699,220862,232186,145600,240453)
+
+#Load all files and grab only comparitors
+
+#Gets all the csv names with full path from root
+files <- list.files(pattern="*.csv",full.names = TRUE,recursive=TRUE)
+
+#loads files into a list
+myfiles <- lapply(files, function(x) read.csv(x))
+
+#Cuts down to only the comparator
+myfiles<-lapply(myfiles, function(x) { x<<-x[is.element(x$UNITID,CompareIDs),]  })
+```
+
+
+
+
+```{r echo=FALSE}
+
+#Add a year variable to each file based on file name
+myfiles<-lapply(myfiles,function(x) cbind(x, Year=NA) )
+
+#Add Year to each based on file name
+for(i in 1:length(files)){
+  TheYear<-as.numeric(unlist(regmatches(files[[i]], gregexpr("[0-9]+", files[[i]]))))
+  myfiles[[i]]$Year<-TheYear
+}
+
+#merge the new hire counts
+
+NewHires<-do.call(rbind,myfiles[grepl("_nh.",files)])
+
+#These are the key variables
+
+KeyNH<-NewHires[,c("UNITID","OCCUPCAT", "HRTOTLT","Year")]
+library(plyr)
+
+#Adding nice labels for schools
+KeyNH$School<-as.factor(revalue(as.character(KeyNH$UNITID),c("122409"="SD","209807"="PSU","206084"="Toledo","228769"="Arlington","172699"="WMichigan","220862"="Memphis","232186"="GM","145600"="UIChicago", "240453"="UWMilwaukee")))
+
+#Adding nice labels for Staff type
+
+StaffTypes<-c("100"="All" ,
+"200"	="InstrResearchPublic",
+"210"	="Instructional",
+"220"	="Research",
+"230"	="Public_service",
+"250"	="LibrariansEdService",
+"300"	="Management",
+"310"	="Business",
+"320"	="Computer",
+"330"	="LegalMedia",
+"340"	="Health",
+"350"	="Service",
+"360"	="Sales",
+"370"	="OfficeSupport",
+"380"	="Maintenance",
+"390"	="Production")
+
+KeyNH$Staff<-as.factor(revalue(as.character(KeyNH$OCCUPCAT), StaffTypes))
+
+#Basic data handling of new hires is done.  
+
+
+# This is only academic staff
+AcademicStaff<-do.call(rbind,myfiles[grepl("_sis.",files)])
+#Adding nice labels for schools
+AcademicStaff$School<-as.factor(revalue(as.character(AcademicStaff$UNITID),c("122409"="SD","209807"="PSU","206084"="Toledo","228769"="Arlington","172699"="WMichigan","220862"="Memphis","232186"="GM","145600"="UIChicago", "240453"="UWMilwaukee")))
+
+```
+# Measure of Turnover in Teaching Staff 2012-2014
+
+
+Staff leaving from year-to-year is measured as the difference between SISTOTL for all full time instructional staff between the last and current year of the Fall staff surveys, plus the new hire count HRTOTLT with occupation category 210 which are full-time instructional.
+
+```{r echo=FALSE}
+KeyLevels<-AcademicStaff[AcademicStaff$FACSTAT==0,c("School","Year","SISTOTL")]
+KeyLevels$Year<-as.integer(as.character(KeyLevels$Year))
+
+CopyKeyLevels<-KeyLevels
+library(sqldf)
+
+Levels<-unique(sqldf("select KeyLevels.School as School, KeyLevels.Year as Year, KeyLevels.SISTOTL Current, CopyKeyLevels.SISTOTL Past  from KeyLevels, CopyKeyLevels where KeyLevels.School=CopyKeyLevels.School and (KeyLevels.Year-1)=CopyKeyLevels.Year;"))
+
+NH<-sqldf("select School, Year, sum(HRTOTLT) as NH from KeyNH where OCCUPCAT=210  group by School, Year ;")
+
+Combined<-sqldf("select * from Levels, NH where Levels.School=NH.School and Levels.Year=NH.Year; ")
+Combined$Loss<- -(Combined$Current-Combined$Past-Combined$NH)
+
+Combined
+
+```
+
+PSU reports growth in instructional staffing levels in excess of new hires in 2014.  Every other comparator had people leave.  For example, San Diego State went from 813 full-time instructional staff in 2012 to 806 in 2013.  They did this while hireing 101 people which implies that 108 left.
